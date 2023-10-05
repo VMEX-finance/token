@@ -81,7 +81,6 @@ contract VMEXToken is ERC20, CCIPReceiver {
 
 	}
 
-	function _ccipSend(
 
 
 }
