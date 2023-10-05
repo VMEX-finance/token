@@ -10,15 +10,13 @@ contract VMEXToken is ERC20, CCIPReceiver {
 
 	IRouterClient internal router; 
 
-	//TODO: add modifier for ccip router only to burn/mint
-
-
 	//temp -- need to get msig address and put here
 	address owner; 
 
 	uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
 	
 	//owner will be changed to msig later
+	//TODO: add modifier for ccip router only to burn/mint
 	modifier onlyCCIPRouterOrMsig() {
 		require(msg.sender == address(router) || msg.sender == owner); 
 		_; 
@@ -65,7 +63,7 @@ contract VMEXToken is ERC20, CCIPReceiver {
 		//we can hardcode this as [0]
 		uint256 amount = message.destTokenAmounts[0].amount; 
 		
-		//check if we need to burn of mint from the received message
+		//check if we need to burn or mint from the received message
 		if (keccak256(abi.encodePacked(latestMessage)) == 
 			keccak256(abi.encodePacked("burn"))) {
 				burn(amount); 
@@ -83,7 +81,7 @@ contract VMEXToken is ERC20, CCIPReceiver {
 
 	}
 
-
+	function _ccipSend(
 
 
 }
