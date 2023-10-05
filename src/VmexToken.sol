@@ -5,6 +5,7 @@ import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {CCIPReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import { ERC20 } from "solmate/tokens/ERC20.sol"; 
+import { IERC20 } from "forge-std/interfaces/IERC20.sol"; 
 
 contract VMEXToken is ERC20, CCIPReceiver {
 
@@ -14,9 +15,9 @@ contract VMEXToken is ERC20, CCIPReceiver {
 	address owner; 
 
 	uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
+	address internal constant LINK = 0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6; 
 	
 	//owner will be changed to msig later
-	//TODO: add modifier for ccip router only to burn/mint
 	modifier onlyCCIPRouterOrMsig() {
 		require(msg.sender == address(router) || msg.sender == owner); 
 		_; 
@@ -81,6 +82,32 @@ contract VMEXToken is ERC20, CCIPReceiver {
 
 	}
 
+	//assuming we're only going to pay with LINK for 10% discount
+	function _ccipSend(
+		uint64 destinationChainSelector,
+		address receiver, 
+		string memory text
+	) external onlyCCIPRouterOrMsig returns (bytes32 messageId) {
+		Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
+			receiver: abi.encode(receiver), 
+			data: abi.encode(text),
+			tokenAmounts: new Client.EVMTokenAmount[](0),
+			extraArgs: "",
+			feeToken: LINK
+		}); 
+
+		uint256 fee = IRouterClient(router).getFee(
+			destinationChainSelector,
+			message
+		); 
+		
+		IERC20(LINK).approve(address(router), fee);  
+		messageId = IRouterClient(router).ccipSend(
+			destinationChainSelector, 
+			message
+		); 
+
+	}	
 
 
 }
