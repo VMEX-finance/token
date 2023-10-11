@@ -13,7 +13,9 @@ import {Test, console2} from "forge-std/Test.sol";
 contract VMEXToken is ERC20, CCIPReceiver, Test {
 
 	IRouterClient internal router; 
-
+	
+	//TODO: add mapping of assets, whitelisted chains, 
+	//TODO: add function to add a whitelisted chain
 	//temp -- need to get msig address and put here
 	address owner; 
 
