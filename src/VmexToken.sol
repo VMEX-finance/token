@@ -1,4 +1,3 @@
-	//assuming we're only going to accept pay with LINK for 10% discount
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.19;
 
