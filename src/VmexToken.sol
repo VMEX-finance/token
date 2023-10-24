@@ -3,20 +3,19 @@ pragma solidity ^0.8.19;
 
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
+import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol"; 
 import {CCIPReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import { ERC20 } from "solmate/tokens/ERC20.sol"; 
 import { IERC20 } from "forge-std/interfaces/IERC20.sol"; 
 
-import {Test, console2} from "forge-std/Test.sol"; 
 
-contract VMEXToken is ERC20, CCIPReceiver, Test {
+import {Test, console2} from "forge-std/Test.sol";
+
+contract VMEXToken is ERC20, CCIPReceiver, Ownable, Test {
 
 	IRouterClient internal router; 
 	
-	//TODO: add mapping of assets, whitelisted chains, 
-	//TODO: add function to add a whitelisted chain
 	//temp -- need to get msig address and put here
-	address owner; 
 
 	enum PayFeesIn {
 		LINK,
@@ -28,51 +27,56 @@ contract VMEXToken is ERC20, CCIPReceiver, Test {
 		MINT
 	}
 
+	 error DestinationChainNotAllowlisted(uint64 destinationChainSelector); // Used when the destination chain has not been allowlisted by the contract owner()
+
+	//chains we are launched on and are accepting bridged tokens
+    mapping(uint64 => bool) public allowlistedChains;
+
 	uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
 	address internal constant LINK = 0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6; 
 	bool public isOpenToPublic = true;  
 	
-	//owner will be changed to msig later
+	//owner() will be changed to msig later
 	modifier onlyCCIPRouterOrMsig() {
-		require(msg.sender == address(router) || msg.sender == owner); 
+		require(msg.sender == address(router) || msg.sender == owner()); 
 		_; 
 	}
 
 	modifier MsigOnly {
-		require (msg.sender == owner); 
+		require (msg.sender == owner()); 
 		_;  
 	}
 
-	//this can be changed to just a require statement, but I thought this was cleaner
-	//not sure if modifiers cost more gas or not
-	modifier Open {
-		require (isOpenToPublic == true); 
-		_; 
-	}
+	modifier onlyAllowlistedChain(uint64 _destinationChainSelector) {
+		if (!allowlistedChains[_destinationChainSelector])
+        revert DestinationChainNotAllowlisted(_destinationChainSelector);
+        _;
+    }
 
 	event MessageReceived(
 		bytes32 latestMessageId,
-    uint64 latestSourceChainSelector,
-    address latestSender,
-    string latestMessage
+		uint64 latestSourceChainSelector,
+    	address latestSender,
+    	string latestMessage
 	);
 
 	//TODO: set msig address here
-	constructor(address _router) ERC20("VMEX Token", "VMEX", 18) CCIPReceiver(_router) {
+	constructor(address _router, bool hubChain) ERC20("VMEX Token", "VMEX", 18) CCIPReceiver(_router) Ownable(msg.sender) {
 		router = IRouterClient(_router); 	
-		owner = msg.sender; 
-		_mint(owner, MAX_TOTAL_SUPPLY);  
+		if (hubChain == true) {
+			_mint(owner(), MAX_TOTAL_SUPPLY);  
+		}
 	}
 
 	//these have to be public for the router to access, and for this contract to access based on messages received
 	//TODO: send minted tokens to team msig
 	function mint(uint256 amount) public onlyCCIPRouterOrMsig {
 		require(amount + totalSupply <= MAX_TOTAL_SUPPLY, "Cannot mint more than max total supply");  
-		_mint(owner, amount); 	
+		_mint(owner(), amount); 	
 	}
 	
 	function burn(uint256 amount) public onlyCCIPRouterOrMsig {
-		_burn(owner, amount); 
+		_burn(owner(), amount); 
 	}
 
 	function _ccipReceive(
@@ -80,25 +84,23 @@ contract VMEXToken is ERC20, CCIPReceiver, Test {
 	) internal override {
 		//receive ccip message from router
 		//determine if we should burn or mint based on the message	
-		bytes32 latestMessageId = message.messageId;
+	bytes32 latestMessageId = message.messageId;
     uint64 latestSourceChainSelector = message.sourceChainSelector;
     address latestSender = abi.decode(message.sender, (address));
     string memory latestMessage = abi.decode(message.data, (string)); 
 
 		//assuming that we're only ever using this for our token, 
 		//we can hardcode this as [0]
-		uint256 amount = message.destTokenAmounts[0].amount; 
+		//uint256 amount = message.destTokenAmounts[0].amount; 
 
-		console2.log("latest message", latestMessage); 
-		
 		//check if we need to burn or mint from the received message
 		//this is only for this chain -- the receiving chain
 		if (keccak256(abi.encodePacked(latestMessage)) == 
 			keccak256(abi.encodePacked("burn"))) {
-				burn(amount); 
+				burn(100e18); 
 		} else if (keccak256(abi.encodePacked(latestMessage)) == 
 			keccak256(abi.encodePacked("mint"))) {
-				mint(amount); 
+				mint(100e18); 
 		}
 		
 		//emit the event message data 
@@ -118,8 +120,8 @@ contract VMEXToken is ERC20, CCIPReceiver, Test {
 		BurnOrMint burnOrMint,
 		uint256 amount,
 		PayFeesIn payFeesIn
-	) external returns (bytes32 messageId) {
-		require(isOpenToPublic == true || msg.sender == owner); 
+	) external onlyAllowlistedChain(destinationChainSelector) returns (bytes32 messageId) {
+		require(isOpenToPublic == true || msg.sender == owner()); 
 
 		messageId = bridge(
 			destinationChainSelector, 
@@ -144,15 +146,10 @@ contract VMEXToken is ERC20, CCIPReceiver, Test {
 		address receiver, 
 		BurnOrMint burnOrMint,
 		uint256 amount,
-		PayFeesIn payFeesIn
+		PayFeesIn payFeesIn		
 	) public returns (bytes32 messageId) {
-		Client.EVMTokenAmount[] memory tokenAmount = new Client.EVMTokenAmount[](1); 
-		tokenAmount[0] = Client.EVMTokenAmount({
-			token: address(this),
-			amount: amount
-		}); 
 		
-		//if we're burning on the destination chain, this chain needs to do the opposite	
+		//if we're burning on the destination chain, this chain needs to do the opposite
 		string memory text; 
 		if (burnOrMint == BurnOrMint.BURN) {
 			mint(amount); 
@@ -165,15 +162,17 @@ contract VMEXToken is ERC20, CCIPReceiver, Test {
 		Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
 			receiver: abi.encode(receiver), 
 			data: abi.encode(text),
-			tokenAmounts: tokenAmount,
-			extraArgs: "",
+			tokenAmounts: new Client.EVMTokenAmount[](0),
+			extraArgs: Client._argsToBytes(
+				Client.EVMExtraArgsV1({gasLimit: 200_000, strict: false})
+			),
 			feeToken: payFeesIn == PayFeesIn.LINK ? LINK : address(0)
 		}); 
 		
 		uint256 fee = IRouterClient(router).getFee(
-			destinationChainSelector,
-			message
-		); 
+				destinationChainSelector,
+				message
+			); 
 		
 		if (payFeesIn == PayFeesIn.LINK) {
 			IERC20(LINK).transferFrom(msg.sender, address(this), fee); 
@@ -189,15 +188,23 @@ contract VMEXToken is ERC20, CCIPReceiver, Test {
 			); 
 		}
 
+		messageId = IRouterClient(router).ccipSend{value: fee}(
+			destinationChainSelector, 
+			message
+		); 
+
 		return messageId; 
 
 	}	
 	
 
-	//Helpers//
+	////////////////// Helpers \\\\\\\\\\\\\\\\\\
+	function allowlistDestinationChain(uint64 _destinationChainSelector, bool allowed) external onlyOwner {
+		allowlistedChains[_destinationChainSelector] = allowed;
+    }
 
-	function _withdrawGasTokens(uint256 amount, IERC20 token) external MsigOnly {
-		token.transfer(owner, amount); 	
+	function withdrawGasTokens(uint256 amount, IERC20 token) external MsigOnly {
+		token.transfer(owner(), amount); 	
 	}
 
 	function toggleOpenStatus() external MsigOnly {
@@ -208,7 +215,8 @@ contract VMEXToken is ERC20, CCIPReceiver, Test {
 		}
 	}
 	
-	//to receive eth (for gas)
+	//to receive eth to pay for ccip
+	//router accepts ETH and WETH as payment
 	receive() payable external {}
 
 

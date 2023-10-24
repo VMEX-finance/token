@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Test, console2} from "forge-std/Test.sol";
 import "../src/VmexToken.sol"; 
+import {IVMEXToken} from "../src/IVmexToken.sol"; 
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 import {CCIPReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
@@ -10,11 +11,21 @@ import {CCIPReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/applications
 
 contract TokenTest is Test {
 	
+	//IVMEXToken internal vmexToken; 
+	address internal LINK = 0x779877A7B0D9E8603169DdbD7836e478b4624789; 
+	address internal vmexTokenArb = 0x55d89cF26Df0fD27E9B84C48C3350C91e1016daA; 
 	VMEXToken internal vmexToken; 
-	
+
+	uint64 arbSelection = 6101244977088475029; 
+
+
 	function setUp() public {
-		address router = address(0x69); 
-		vmexToken = new VMEXToken(router);
+		address router = 0xD0daae2231E9CB96b94C8512223533293C3693Bf; 
+		vmexToken = new VMEXToken(router, true); 
+		vmexToken.allowlistDestinationChain(arbSelection, true); 
+		
+		deal(LINK, address(vmexToken), 100e18); 
+		deal(address(vmexToken), 10e18); 
 	}
 
 
@@ -46,10 +57,10 @@ contract TokenTest is Test {
 
 	function testCCIPSend() public {
 		//temp until I get the address for ccipRouter on OP
-		VMEXToken.BurnOrMint burn = VMEXToken.BurnOrMint.BURN; 
+		vmexToken.allowlistDestinationChain(arbSelection, true); 
+		VMEXToken.BurnOrMint mint = VMEXToken.BurnOrMint.MINT; 
 		VMEXToken.PayFeesIn payLink = VMEXToken.PayFeesIn.LINK; 
-		vm.expectRevert(); 
-		vmexToken.bridge(0, address(this), burn, 100e18, payLink); 
+		vmexToken.bridgeWithFeePaidByProtocol(arbSelection, vmexTokenArb, mint, 100e18, payLink); 
 	}
 
 //	function testCCIPReceive() public {
