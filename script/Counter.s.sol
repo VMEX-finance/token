@@ -34,25 +34,26 @@ contract TokenScript is Script, Helper {
 
 contract BridgeToken is Script, Helper {
 	function run(
-		address payable vmexToken, //source
+		address payable _vmexToken, //source
 	    SupportedNetworks destination,
 	    address receiver,
 		VMEXToken.BurnOrMint burnOrMint,
-		uint256 amount,
 	    VMEXToken.PayFeesIn payFeesIn
 	) external {
+		VMEXToken vmexToken = VMEXToken(_vmexToken); 
+
 	    uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 	    vm.startBroadcast(deployerPrivateKey);
 	
-	    (, , , uint64 destinationChainId) = Helper.getConfigFromNetwork(destination);
+	    (, address link, , uint64 destinationChainId) = Helper.getConfigFromNetwork(destination);
 		console2.log(destinationChainId); 
 			
-	    bytes32 messageId = VMEXToken(vmexToken).bridgeWithFeePaidByProtocol(
+	    bytes32 messageId = vmexToken.bridgeWithFeePaidByProtocol(
 	        destinationChainId,
 	        receiver,
 			burnOrMint,
-			amount,
-	        payFeesIn
+	        payFeesIn,
+			link
 	    );
 	
 	    console2.log(
