@@ -1,0 +1,16 @@
+cast send <ADDRESS> --rpc-url $AVAX_FUJI_RPC --private-key b3e8bababde3083daeca3e2666427d225ea28c795a0c5d19f48afb5c26280768 --value 0.05ether
+
+PRIVATE_KEY: b3e8bababde3083daeca3e2666427d225ea28c795a0c5d19f48afb5c26280768
+
+#mint on dest chain test
+forge script ./script/Counter.s.sol:BridgeToken -vvv --broadcast --rpc-url $AVAX_FUJI_RPC --sig "run(address,uint8,address)" -- <TOKEN_ADDRESS> 0 <TOKEN_ADDRESS_ARB>
+
+cast send <ADDRESS> --rpc-url $AVAX_FUJI_RPC --private-key b3e8bababde3083daeca3e2666427d225ea28c795a0c5d19f48afb5c26280768 "withdraw(address)" 0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c
+
+cast call <ADDRESS> "totalSupply()returns(uint256)" --rpc-url $ETH_SEPOLIA_RPC
+
+0x5fC685F2DD168eE6483Fe59C5928f5e9b0AEfE99
+0x0A88918171d362D2d7887f793Eaf19248f85Df6F
+
+
+

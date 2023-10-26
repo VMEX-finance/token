@@ -21,7 +21,7 @@ contract TokenTest is Test {
 	function setUp() public {
 		address router = 0xD0daae2231E9CB96b94C8512223533293C3693Bf; 
 		vmexToken = new VMEXToken(router, true); 
-		vmexToken.allowlistDestinationChain(arbSelection, true); 
+		//vmexToken.allowlistDestinationChain(arbSelection, true); 
 		
 		deal(LINK, address(vmexToken), 100e18); 
 		deal(address(vmexToken), 10e18); 
@@ -39,20 +39,51 @@ contract TokenTest is Test {
 		console2.log(name); 
 	}
 
-	function testMint() public {
-		uint256 mintAmount = 10e18; 
-		vm.expectRevert(); 
-		vmexToken.mint(mintAmount); 
-		
-	}
-
 	function testBurn() public {
-		uint256 burnAmount = 10_000_000e18; 
-		vmexToken.burn(burnAmount); 
-
-		uint256 totalSupply = vmexToken.totalSupply(); 
+		uint256 totalSupply = vmexToken.totalSupply(); 	
 		console2.log(totalSupply); 
+
+		uint256 owner = IERC20(address(vmexToken)).balanceOf(vmexToken.owner()); 
+		console2.log("owner bal:", owner); 
+
+		bytes memory burn = abi.encodeWithSignature("burn(address,uint256)", vmexToken.owner(), 10000e18); 
+
+		(bool success, ) = address(vmexToken).call(burn); 
+        require(success, "mint or burn failed");
+
+		totalSupply = vmexToken.totalSupply(); 	
+		console2.log(totalSupply); 
+
+		owner = IERC20(address(vmexToken)).balanceOf(vmexToken.owner()); 
+		console2.log("owner bal:", owner); 
+
 	}
+
+	//function testAbiBurn() public {
+	//	uint256 totalSupply = vmexToken.totalSupply(); 	
+	//	console2.log(totalSupply); 
+
+	//	vmexToken.testBurn(); 
+
+	//	totalSupply = vmexToken.totalSupply(); 	
+	//	console2.log(totalSupply); 
+	//}
+	
+	//@dev remnant from when mints and burns were external/public
+	//function testMint() public {
+	//	uint256 mintAmount = 10e18; 
+	//	vm.expectRevert(); 
+	//	vmexToken.mint(address(this), mintAmount); 
+	//	
+	//}
+
+	//function testBurn() public {
+	//	uint256 burnAmount = 10_000_000e18; 
+	//	vmexToken.burn(address(this), burnAmount); 
+
+	//	uint256 totalSupply = vmexToken.totalSupply(); 
+	//	console2.log(totalSupply); 
+	//}
 
 	function testCCIPSend() public {
 		////temp until I get the address for ccipRouter on OP

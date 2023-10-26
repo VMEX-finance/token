@@ -5,6 +5,7 @@ import {Script, console2} from "forge-std/Script.sol";
 import {Helper} from "./Helper.sol"; 
 
 import {VMEXToken} from "../src/VmexToken.sol"; 
+//import {Minter} from "../src/Minter.sol"; 
 
 contract TokenScript is Script, Helper {
 	
@@ -15,7 +16,7 @@ contract TokenScript is Script, Helper {
 
 		VMEXToken vmexToken; 
 		(address router, , ,) = Helper.getConfigFromNetwork(source); 
-		if (source == Helper.SupportedNetworks.ETHEREUM_SEPOLIA) {
+		if (source == Helper.SupportedNetworks.AVALANCHE_FUJI) {
 			vmexToken = new VMEXToken(router, true); 
 		} else {
 			vmexToken = new VMEXToken(router, false); 
@@ -36,24 +37,26 @@ contract BridgeToken is Script, Helper {
 	function run(
 		address payable _vmexToken, //source
 	    SupportedNetworks destination,
-	    address receiver,
-		VMEXToken.BurnOrMint burnOrMint,
-	    VMEXToken.PayFeesIn payFeesIn
+	    address receiver
 	) external {
 		VMEXToken vmexToken = VMEXToken(_vmexToken); 
 
 	    uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 	    vm.startBroadcast(deployerPrivateKey);
 	
-	    (, address link, , uint64 destinationChainId) = Helper.getConfigFromNetwork(destination);
+	    (, , , uint64 destinationChainId) = Helper.getConfigFromNetwork(destination);
 		console2.log(destinationChainId); 
-			
-	    bytes32 messageId = vmexToken.bridgeWithFeePaidByProtocol(
+
+		uint256 amount = 100 * 1e18; 
+		address user = vmexToken.owner(); 	
+
+	    bytes32 messageId = vmexToken.bridge(
 	        destinationChainId,
 	        receiver,
-			burnOrMint,
-	        payFeesIn,
-			link
+			user,
+			amount,
+			VMEXToken.BurnOrMint.MINT,
+			VMEXToken.PayFeesIn.NATIVE	
 	    );
 	
 	    console2.log(
