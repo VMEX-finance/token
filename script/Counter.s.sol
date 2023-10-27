@@ -15,12 +15,14 @@ contract TokenScript is Script, Helper {
 		vm.startBroadcast(privateKey);
 
 		VMEXToken vmexToken;
-		(address router, , ,) = Helper.getConfigFromNetwork(source);
+		(address router, , ,uint64 sourceId) = Helper.getConfigFromNetwork(source);
 		if (source == Helper.SupportedNetworks.AVALANCHE_FUJI) {
 			vmexToken = new VMEXToken(router, true);
 		} else {
 			vmexToken = new VMEXToken(router, false);
 		}
+
+		vmexToken.allowlistDestinationChain(sourceId, true); 
 
 		console2.log(
 			"VMEX Token deployed on:",
@@ -49,6 +51,8 @@ contract BridgeToken is Script, Helper {
 
 		uint256 amount = 100 * 1e18;
 		address user = vmexToken.owner();
+
+		vmexToken.allowlistDestinationChain(destinationChainId, true); 
 
 	    bytes32 messageId = vmexToken.bridge(
 	        destinationChainId,

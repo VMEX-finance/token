@@ -32,6 +32,11 @@ contract VMEXToken is ERC20, CCIPReceiver, Ownable, Test {
 	address internal constant LINK = 0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6;
 	bool public isOpen = true;
 
+	event Bridge(
+		uint64 sourceChain,
+		address sentBy
+	); 
+
 	//TODO: set msig address here
 	constructor(address _router, bool hubChain) ERC20("VMEX Token", "VMEX", 18) CCIPReceiver(_router) Ownable(0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c) {
 		router = IRouterClient(_router);
@@ -59,8 +64,17 @@ contract VMEXToken is ERC20, CCIPReceiver, Ownable, Test {
 		Client.Any2EVMMessage memory message
 	) internal override {
 		//receive ccip message from router
+		require(allowlistedChains[message.sourceChainSelector] == true, "source not allowed"); 
+
 		(bool success, ) = address(this).call(message.data);
         require(success, "mint or burn failed");
+		
+		//ccip already emits these, and erc20 already emits transfers, so this is already stored
+		//do we want to emit the info twice?
+		emit Bridge(
+			message.sourceChainSelector,
+			abi.decode(message.sender, (address))
+		);
 	}
 
 	//@dev used for when users are paying for bridging themselves and already have vmex tokens on the source chain
@@ -79,7 +93,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Ownable, Test {
 		PayFeesIn payFeesIn
 	) public payable returns (bytes32 messageId) {
 		require(IERC20(address(this)).balanceOf(msg.sender) >= amount, "balance too low on source chain");
-		require(allowlistedChains[destinationChainSelector] = true, "chain not allowed");
+		require(allowlistedChains[destinationChainSelector] == true, "chain not allowed");
 
 		//if we're burning on the destination chain, this chain needs to do the opposite
 		bytes memory functionCallDestChain;
@@ -109,9 +123,9 @@ contract VMEXToken is ERC20, CCIPReceiver, Ownable, Test {
 			//if we are not paying for bridge fees, we transfer some link from sender to pay
 			if (isOpen == false) {
 				IERC20(LINK).transferFrom(msg.sender, address(this), fee);
-				IERC20(LINK).approve(address(router), fee);
 			}
 
+			IERC20(LINK).approve(address(router), fee);
 			messageId = IRouterClient(router).ccipSend(
 				destinationChainSelector,
 				message
@@ -150,7 +164,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Ownable, Test {
         if (!sent) revert ("failed to withdraw eth");
 	}
 
-	function toggleOpenStatus() external {
+	function toggleOpenStatus() external onlyOwner {
 		if (isOpen == true) {
 			isOpen = false;
 		} else {

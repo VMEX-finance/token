@@ -21,7 +21,6 @@ contract TokenTest is Test {
 		address router = 0xD0daae2231E9CB96b94C8512223533293C3693Bf;
 		vmexToken = new VMEXToken(router, true);
 		//vmexToken.allowlistDestinationChain(arbSelection, true);
-		console2.log("AT POINT 1");
 		// deal(LINK, address(vmexToken), 100e18);
 		// deal(address(vmexToken), 10e18);
 	}
@@ -65,22 +64,6 @@ contract TokenTest is Test {
 	//	vmexToken.testBurn();
 
 	//	totalSupply = vmexToken.totalSupply();
-	//	console2.log(totalSupply);
-	//}
-
-	// @dev remnant from when mints and burns were external/public
-	function testMint() public {
-		uint256 mintAmount = 10e18;
-		vm.expectRevert();
-		vmexToken.mint(address(this), mintAmount);
-
-	}
-
-	//function testBurn() public {
-	//	uint256 burnAmount = 10_000_000e18;
-	//	vmexToken.burn(address(this), burnAmount);
-
-	//	uint256 totalSupply = vmexToken.totalSupply();
 	//	console2.log(totalSupply);
 	//}
 
