@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.0;
+pragma solidity ^0.8.20;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {Helper} from "./Helper.sol"; 
+import {Helper} from "./Helper.sol";
 
-import {VMEXToken} from "../src/VmexToken.sol"; 
-//import {Minter} from "../src/Minter.sol"; 
+import {VMEXToken} from "../src/VmexToken.sol";
+//import {Minter} from "../src/Minter.sol";
 
 contract TokenScript is Script, Helper {
-	
-	//@param source -- enum 
+
+	//@param source -- enum
 	function run(Helper.SupportedNetworks source) public {
-		uint256 privateKey = vm.envUint("PRIVATE_KEY"); 
+		uint256 privateKey = vm.envUint("PRIVATE_KEY");
 		vm.startBroadcast(privateKey);
 
-		VMEXToken vmexToken; 
-		(address router, , ,) = Helper.getConfigFromNetwork(source); 
+		VMEXToken vmexToken;
+		(address router, , ,) = Helper.getConfigFromNetwork(source);
 		if (source == Helper.SupportedNetworks.AVALANCHE_FUJI) {
-			vmexToken = new VMEXToken(router, true); 
+			vmexToken = new VMEXToken(router, true);
 		} else {
-			vmexToken = new VMEXToken(router, false); 
+			vmexToken = new VMEXToken(router, false);
 		}
 
 		console2.log(
@@ -27,9 +27,9 @@ contract TokenScript is Script, Helper {
 			Helper.networks[source],
 			"at address:",
 			address(vmexToken)
-		); 	
+		);
 
-		vm.stopBroadcast(); 
+		vm.stopBroadcast();
     }
 }
 
@@ -39,16 +39,16 @@ contract BridgeToken is Script, Helper {
 	    SupportedNetworks destination,
 	    address receiver
 	) external {
-		VMEXToken vmexToken = VMEXToken(_vmexToken); 
+		VMEXToken vmexToken = VMEXToken(_vmexToken);
 
 	    uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 	    vm.startBroadcast(deployerPrivateKey);
-	
-	    (, , , uint64 destinationChainId) = Helper.getConfigFromNetwork(destination);
-		console2.log(destinationChainId); 
 
-		uint256 amount = 100 * 1e18; 
-		address user = vmexToken.owner(); 	
+	    (, , , uint64 destinationChainId) = Helper.getConfigFromNetwork(destination);
+		console2.log(destinationChainId);
+
+		uint256 amount = 100 * 1e18;
+		address user = vmexToken.owner();
 
 	    bytes32 messageId = vmexToken.bridge(
 	        destinationChainId,
@@ -56,14 +56,14 @@ contract BridgeToken is Script, Helper {
 			user,
 			amount,
 			VMEXToken.BurnOrMint.MINT,
-			VMEXToken.PayFeesIn.NATIVE	
+			VMEXToken.PayFeesIn.NATIVE
 	    );
-	
+
 	    console2.log(
 	        "You can now monitor the status of your Chainlink CCIP Message via https://ccip.chain.link using CCIP Message ID: "
 	    );
 	    console2.logBytes32(messageId);
-	
+
 	    vm.stopBroadcast();
 	}
 }
