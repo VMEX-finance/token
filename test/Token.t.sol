@@ -17,7 +17,7 @@ contract TokenTest is Test {
 
     function setUp() public {
         address router = 0xD0daae2231E9CB96b94C8512223533293C3693Bf;
-        vmexToken = new VMEXToken(router, true);
+        vmexToken = new VMEXToken(router, LINK, true);
         //vmexToken.allowlistDestinationChain(arbSelection, true);
         // deal(LINK, address(vmexToken), 100e18);
         // deal(address(vmexToken), 10e18);
