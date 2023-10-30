@@ -12,8 +12,10 @@ import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {Test, console2} from "forge-std/Test.sol";
 
 contract VMEXToken is ERC20, CCIPReceiver, Owned, Test {
+    using SafeTransferLib for ERC20;
+
     //set chain to allowed as both source, and destination
-    mapping(uint64 => bool) public allowlistedChains;
+    mapping(uint64 chain => address vmexToken) public allowlistedChains;
 
     uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
     address internal immutable LINK;
@@ -22,16 +24,18 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned, Test {
     error DestinationChainNotAllowed(uint64 chain);
     error SourceChainNotAllowed(uint64 chain);
     error NotEnoughEthForFee();
+    error SenderNotVmexToken();
 
-    constructor(address _router, address _link, bool hubChain)
+    constructor(address _router, address _link, bool hubChain, address newOwner)
         ERC20("VMEX Token", "VMEX", 18)
         CCIPReceiver(_router)
-        Owned(0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c)
+        Owned(newOwner)
     {
         LINK = _link;
-        SafeTransferLib.safeApprove(ERC20(LINK), address(i_router), type(uint256).max);
+        ERC20(_link).safeApprove(address(i_router), type(uint256).max);
+
         if (hubChain == true) {
-            _mint(owner, MAX_TOTAL_SUPPLY);
+            _mint(newOwner, MAX_TOTAL_SUPPLY);
         }
     }
 
@@ -40,12 +44,12 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned, Test {
     receive() external payable {}
 
     ////////////////// Helpers \\\\\\\\\\\\\\\\\\
-    function allowlistChain(uint64 _destinationChainSelector, bool allowed) external onlyOwner {
-        allowlistedChains[_destinationChainSelector] = allowed;
+    function allowlistChain(uint64 destinationChainSelector, address vmexToken) external onlyOwner {
+        allowlistedChains[destinationChainSelector] = vmexToken;
     }
 
     function withdrawGasTokens(uint256 amount) external onlyOwner {
-        IERC20(LINK).transfer(owner, amount);
+        ERC20(LINK).safeTransfer(owner, amount);
     }
 
     function withdraw(address beneficiary) external onlyOwner {
@@ -71,56 +75,55 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned, Test {
     //@param payFeesIn -- an enum specifying the token we are using to pay ccip fees
     function bridge(
         uint64 destinationChainSelector,
-        address receiverTokenAddress,
         address receiverUserAddress,
         uint256 amount,
         bool payFeesNative
     ) public payable returns (bytes32 messageId) {
-		bool res = allowlistedChains[destinationChainSelector]; 
-		console2.log(res); 
-        if (allowlistedChains[destinationChainSelector] == false) {
-			console2.log("reverting here"); 
+        address destinationVmexToken = allowlistedChains[destinationChainSelector];
+        if (destinationVmexToken == address(0)) {
             revert DestinationChainNotAllowed(destinationChainSelector);
         }
 
+        _burn(msg.sender, amount);
+
         //if we're burning on the destination chain, this chain needs to do the opposite
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
-            receiver: abi.encode(receiverTokenAddress),
+            receiver: abi.encode(destinationVmexToken),
             data: abi.encode(receiverUserAddress, amount),
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: "",
             feeToken: payFeesNative ? address(0) : LINK
         });
 
-        _burn(msg.sender, amount);
-
         uint256 fee = IRouterClient(i_router).getFee(destinationChainSelector, message);
 
         if (payFeesNative == false) {
             //if we are not paying for bridge fees, we transfer some link from sender to pay
             if (isOpen == false) {
-                SafeTransferLib.safeTransferFrom(ERC20(LINK), msg.sender, address(this), fee);
+                ERC20(LINK).safeTransferFrom(msg.sender, address(this), fee);
             }
 
-            messageId = IRouterClient(i_router).ccipSend(destinationChainSelector, message);
-        } else {
-            //if we're not paying, user will have to make sure they're sending eth with their tx
-            if (isOpen == false) {
-                if (msg.value < fee) {
-                    revert NotEnoughEthForFee();
-                }
-            }
-
-            messageId = IRouterClient(i_router).ccipSend{value: fee}(destinationChainSelector, message);
+            return IRouterClient(i_router).ccipSend(destinationChainSelector, message);
         }
 
-        return messageId;
+        //if we're not paying, user will have to make sure they're sending eth with their tx
+        if (isOpen == false && msg.value < fee) {
+            revert NotEnoughEthForFee();
+        }
+
+        return IRouterClient(i_router).ccipSend{value: fee}(destinationChainSelector, message);
     }
 
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
-        if (allowlistedChains[message.sourceChainSelector] == false) {
+        address sourceChainVmexToken = allowlistedChains[message.sourceChainSelector];
+        if (sourceChainVmexToken == address(0)) {
             revert SourceChainNotAllowed(message.sourceChainSelector);
         }
+
+        if (sourceChainVmexToken != abi.decode(message.sender, (address))) {
+            revert SenderNotVmexToken();
+        }
+
         (address receiver, uint256 amount) = abi.decode(message.data, (address, uint256));
         _mint(receiver, amount);
     }
