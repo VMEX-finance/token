@@ -18,20 +18,12 @@ contract TokenTest is Test {
     uint64 internal constant BASE_CHAIN_ID = 8453;
 
     address internal constant VMEX_ON_BASE = address(0xbabe);
-    address internal constant SENDER = address(0x4321);
     address internal constant RECEIVER = address(0x1234);
 
     bytes32 internal constant MESSAGE_ID = 0x1230000000000000000000000000000000000000000000000000000000000000;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
-    event BridgeTo(
-        uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount, bytes32 messageId
-    );
-    event BridgeFrom(
-        uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount, bytes32 messageId
-    );
     event ChainAdded(uint64 indexed chain, address vmexToken);
-    event IsOpenChanged(bool isOpen);
 
     receive() external payable {}
 
@@ -47,7 +39,6 @@ contract TokenTest is Test {
         vm.label(address(router), "ROUTER");
         vm.label(address(link), "LINK");
         vm.label(address(this), "TESTER");
-        vm.label(SENDER, "SENDER");
         vm.label(RECEIVER, "RECEIVER");
     }
 
@@ -58,33 +49,9 @@ contract TokenTest is Test {
         assertEq(tokenNotOnHub.totalSupply(), 0);
     }
 
-    function testLinkBridgeToOpened() public {
+    function testLinkBridgeTo() public {
         vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
         uint256 fee = router.fee();
-        bytes32 messageId = router.messageId();
-
-        link.mint(address(vmexToken), fee);
-
-        vm.expectEmit(true, true, false, true, address(vmexToken));
-        emit Transfer(address(this), address(0), MAX_TOTAL_SUPPLY);
-        vm.expectEmit(true, true, false, true, address(link));
-        emit Transfer(address(vmexToken), address(router), fee);
-        vm.expectEmit(true, true, true, true, address(vmexToken));
-        emit BridgeTo(BASE_CHAIN_ID, address(this), RECEIVER, MAX_TOTAL_SUPPLY, messageId);
-
-        vmexToken.bridge(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, false);
-
-        assertEq(vmexToken.balanceOf(address(this)), 0);
-        assertEq(link.balanceOf(address(vmexToken)), 0);
-        assertEq(link.balanceOf(address(router)), fee);
-        assertEq(link.balanceOf(address(this)), 0);
-    }
-
-    function testLinkBridgeToClosed() public {
-        vmexToken.setIsOpen(false);
-        vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
-        uint256 fee = router.fee();
-        bytes32 messageId = router.messageId();
 
         link.mint(address(this), fee);
         link.approve(address(vmexToken), fee);
@@ -95,8 +62,6 @@ contract TokenTest is Test {
         emit Transfer(address(this), address(vmexToken), fee);
         vm.expectEmit(true, true, false, true, address(link));
         emit Transfer(address(vmexToken), address(router), fee);
-        vm.expectEmit(true, true, true, true, address(vmexToken));
-        emit BridgeTo(BASE_CHAIN_ID, address(this), RECEIVER, MAX_TOTAL_SUPPLY, messageId);
 
         vmexToken.bridge(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, false);
 
@@ -106,40 +71,16 @@ contract TokenTest is Test {
         assertEq(link.balanceOf(address(this)), 0);
     }
 
-    function testNativeBridgeToOpened() public {
+    function testNativeBridgeTo() public {
         uint256 nativeBalanceBefore = address(router).balance;
-        vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
-        uint256 fee = router.fee();
-        bytes32 messageId = router.messageId();
-
-        vm.deal(address(vmexToken), fee);
-
-        vm.expectEmit(true, true, false, true, address(vmexToken));
-        emit Transfer(address(this), address(0), MAX_TOTAL_SUPPLY);
-        vm.expectEmit(true, true, true, true, address(vmexToken));
-        emit BridgeTo(BASE_CHAIN_ID, address(this), RECEIVER, MAX_TOTAL_SUPPLY, messageId);
-
-        vmexToken.bridge(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, true);
-
-        assertEq(vmexToken.balanceOf(address(this)), 0);
-        assertEq(address(router).balance, nativeBalanceBefore + fee);
-        assertEq(address(vmexToken).balance, 0);
-    }
-
-    function testNativeBridgeToClosed() public {
-        uint256 nativeBalanceBefore = address(router).balance;
-        vmexToken.setIsOpen(false);
 
         vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
         uint256 fee = router.fee();
-        bytes32 messageId = router.messageId();
 
         vm.deal(address(this), fee);
 
         vm.expectEmit(true, true, false, true, address(vmexToken));
         emit Transfer(address(this), address(0), MAX_TOTAL_SUPPLY);
-        vm.expectEmit(true, true, true, true, address(vmexToken));
-        emit BridgeTo(BASE_CHAIN_ID, address(this), RECEIVER, MAX_TOTAL_SUPPLY, messageId);
 
         vmexToken.bridge{value: fee}(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, true);
 
@@ -153,9 +94,7 @@ contract TokenTest is Test {
         vmexToken.bridge(BASE_CHAIN_ID, address(this), MAX_TOTAL_SUPPLY, false);
     }
 
-    function testNativeBridgeToClosedNotEnoughFee() public {
-        vmexToken.setIsOpen(false);
-
+    function testNativeBridgeToNotEnoughFee() public {
         vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
         uint256 fee = router.fee();
 
@@ -177,14 +116,12 @@ contract TokenTest is Test {
             messageId: MESSAGE_ID,
             sourceChainSelector: BASE_CHAIN_ID,
             sender: abi.encode(VMEX_ON_BASE),
-            data: abi.encode(SENDER, RECEIVER, amount),
+            data: abi.encode(RECEIVER, amount),
             destTokenAmounts: new Client.EVMTokenAmount[](0)
         });
 
         vm.expectEmit(true, true, false, true, address(vmexToken));
         emit Transfer(address(0), RECEIVER, amount);
-        vm.expectEmit(true, true, true, true, address(vmexToken));
-        emit BridgeFrom(BASE_CHAIN_ID, SENDER, RECEIVER, amount, MESSAGE_ID);
         router.ccipReceive(address(vmexToken), message);
 
         assertEq(totalSupplyBefore + amount, vmexToken.totalSupply());
@@ -198,7 +135,7 @@ contract TokenTest is Test {
             messageId: MESSAGE_ID,
             sourceChainSelector: BASE_CHAIN_ID,
             sender: abi.encode(VMEX_ON_BASE),
-            data: abi.encode(SENDER, RECEIVER, amount),
+            data: abi.encode(RECEIVER, amount),
             destTokenAmounts: new Client.EVMTokenAmount[](0)
         });
         vm.expectRevert(abi.encodeWithSelector(VMEXToken.SourceChainNotAllowed.selector, BASE_CHAIN_ID));
@@ -213,7 +150,7 @@ contract TokenTest is Test {
             messageId: MESSAGE_ID,
             sourceChainSelector: BASE_CHAIN_ID,
             sender: abi.encode(address(0xc0de)),
-            data: abi.encode(SENDER, RECEIVER, amount),
+            data: abi.encode(RECEIVER, amount),
             destTokenAmounts: new Client.EVMTokenAmount[](0)
         });
         vm.expectRevert(VMEXToken.SenderNotVmexToken.selector);
@@ -254,12 +191,5 @@ contract TokenTest is Test {
 
         vm.expectRevert(VMEXToken.VmexTokenAlreadyAddedOnChain.selector);
         vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
-    }
-
-    function testSetIsOpen() public {
-        vm.expectEmit(false, false, false, true, address(vmexToken));
-        emit IsOpenChanged(false);
-
-        vmexToken.setIsOpen(false);
     }
 }

@@ -16,7 +16,6 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
 
     //set chain to allowed as both source, and destination
     mapping(uint64 chain => address vmexToken) public vmexTokenByChain;
-    bool public isOpen = true;
 
     error DestinationChainNotAllowed(uint64 chain);
     error SourceChainNotAllowed(uint64 chain);
@@ -24,12 +23,6 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     error SenderNotVmexToken();
     error VmexTokenAlreadyAddedOnChain();
 
-    event BridgeTo(
-        uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount, bytes32 messageId
-    );
-    event BridgeFrom(
-        uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount, bytes32 messageId
-    );
     event ChainAdded(uint64 indexed chain, address vmexToken);
     event IsOpenChanged(bool isOpen);
 
@@ -67,12 +60,6 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         SafeTransferLib.safeTransferETH(owner, amount);
     }
 
-    function setIsOpen(bool newIsOpen) external onlyOwner {
-        isOpen = newIsOpen;
-
-        emit IsOpenChanged(newIsOpen);
-    }
-
     //@dev used for when users are paying for bridging themselves and already have vmex tokens on the source chain
     //@param destinationChainSelecter -- the chain we are bridging to
     //@param receiver -- the corresponding token address on another chain
@@ -94,7 +81,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         //if we're burning on the destination chain, this chain needs to do the opposite
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(destinationVmexToken),
-            data: abi.encode(msg.sender, receiver, amount),
+            data: abi.encode(receiver, amount),
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: "",
             feeToken: payFeesNative ? address(0) : address(LINK)
@@ -102,26 +89,17 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
 
         uint256 fee = IRouterClient(i_router).getFee(destinationChainSelector, message);
 
-        bytes32 messageId;
         if (payFeesNative) {
             //if we're not paying, user will have to make sure they're sending eth with their tx
-            if (!isOpen && msg.value < fee) {
+            if (msg.value < fee) {
                 revert NotEnoughEthForFee();
             }
 
-            messageId = IRouterClient(i_router).ccipSend{value: fee}(destinationChainSelector, message);
-        } else {
-            //if we are not paying for bridge fees, we transfer some link from sender to pay
-            if (!isOpen) {
-                LINK.safeTransferFrom(msg.sender, address(this), fee);
-            }
-
-            messageId = IRouterClient(i_router).ccipSend(destinationChainSelector, message);
+            return IRouterClient(i_router).ccipSend{value: fee}(destinationChainSelector, message);
         }
 
-        emit BridgeTo(destinationChainSelector, msg.sender, receiver, amount, messageId);
-
-        return messageId;
+        LINK.safeTransferFrom(msg.sender, address(this), fee);
+        return IRouterClient(i_router).ccipSend(destinationChainSelector, message);
     }
 
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
@@ -136,9 +114,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
             revert SenderNotVmexToken();
         }
 
-        (address sender, address receiver, uint256 amount) = abi.decode(message.data, (address, address, uint256));
+        (address receiver, uint256 amount) = abi.decode(message.data, (address, uint256));
         _mint(receiver, amount);
-
-        emit BridgeFrom(sourceChain, sender, receiver, amount, message.messageId);
     }
 }
