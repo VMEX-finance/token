@@ -12,7 +12,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     using SafeTransferLib for ERC20;
 
     uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
-    address internal immutable LINK;
+    ERC20 internal immutable LINK;
 
     //set chain to allowed as both source, and destination
     mapping(uint64 chain => address vmexToken) public vmexTokenByChain;
@@ -33,13 +33,13 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     event ChainAdded(uint64 indexed chain, address vmexToken);
     event IsOpenChanged(bool isOpen);
 
-    constructor(address _router, address _link, bool hubChain, address newOwner)
+    constructor(address _router, address link, bool hubChain, address newOwner)
         ERC20("VMEX Token", "VMEX", 18)
         CCIPReceiver(_router)
         Owned(newOwner)
     {
-        LINK = _link;
-        ERC20(_link).safeApprove(address(i_router), type(uint256).max);
+        LINK = ERC20(link);
+        LINK.safeApprove(address(i_router), type(uint256).max);
 
         if (hubChain) {
             _mint(newOwner, MAX_TOTAL_SUPPLY);
@@ -97,7 +97,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
             data: abi.encode(msg.sender, receiver, amount),
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: "",
-            feeToken: payFeesNative ? address(0) : LINK
+            feeToken: payFeesNative ? address(0) : address(LINK)
         });
 
         uint256 fee = IRouterClient(i_router).getFee(destinationChainSelector, message);
@@ -113,7 +113,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         } else {
             //if we are not paying for bridge fees, we transfer some link from sender to pay
             if (!isOpen) {
-                ERC20(LINK).safeTransferFrom(msg.sender, address(this), fee);
+                LINK.safeTransferFrom(msg.sender, address(this), fee);
             }
 
             messageId = IRouterClient(i_router).ccipSend(destinationChainSelector, message);
