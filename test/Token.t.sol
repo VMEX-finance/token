@@ -18,7 +18,10 @@ contract TokenTest is Test {
     uint64 internal constant BASE_CHAIN_ID = 8453;
 
     address internal constant VMEX_ON_BASE = address(0xbabe);
+    address internal constant SENDER = address(0x4321);
     address internal constant RECEIVER = address(0x1234);
+
+    bytes32 internal constant MESSAGE_ID = 0x1230000000000000000000000000000000000000000000000000000000000000;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event BridgeTo(
@@ -36,7 +39,7 @@ contract TokenTest is Test {
         link = new MockERC20("LINK", "LINK", 18);
         router = new CCIPRouterMock(address(link));
         router.setFee(0.1 ether);
-        router.setMessageId(bytes32("well"));
+        router.setMessageId(MESSAGE_ID);
 
         vmexToken = new VMEXToken(address(router), address(link), true, address(this));
 
@@ -44,6 +47,7 @@ contract TokenTest is Test {
         vm.label(address(router), "ROUTER");
         vm.label(address(link), "LINK");
         vm.label(address(this), "TESTER");
+        vm.label(SENDER, "SENDER");
         vm.label(RECEIVER, "RECEIVER");
     }
 
@@ -170,13 +174,17 @@ contract TokenTest is Test {
         uint256 amount = 1e20;
 
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
-            messageId: 0x1230000000000000000000000000000000000000000000000000000000000000,
+            messageId: MESSAGE_ID,
             sourceChainSelector: BASE_CHAIN_ID,
             sender: abi.encode(VMEX_ON_BASE),
-            data: abi.encode(RECEIVER, amount),
+            data: abi.encode(SENDER, RECEIVER, amount),
             destTokenAmounts: new Client.EVMTokenAmount[](0)
         });
 
+        vm.expectEmit(true, true, false, true, address(vmexToken));
+        emit Transfer(address(0), RECEIVER, amount);
+        vm.expectEmit(true, true, true, true, address(vmexToken));
+        emit BridgeFrom(BASE_CHAIN_ID, SENDER, RECEIVER, amount, MESSAGE_ID);
         router.ccipReceive(address(vmexToken), message);
 
         assertEq(totalSupplyBefore + amount, vmexToken.totalSupply());
@@ -187,10 +195,10 @@ contract TokenTest is Test {
         uint256 amount = 1e20;
 
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
-            messageId: 0x1230000000000000000000000000000000000000000000000000000000000000,
+            messageId: MESSAGE_ID,
             sourceChainSelector: BASE_CHAIN_ID,
             sender: abi.encode(VMEX_ON_BASE),
-            data: abi.encode(RECEIVER, amount),
+            data: abi.encode(SENDER, RECEIVER, amount),
             destTokenAmounts: new Client.EVMTokenAmount[](0)
         });
         vm.expectRevert(abi.encodeWithSelector(VMEXToken.SourceChainNotAllowed.selector, BASE_CHAIN_ID));
@@ -202,10 +210,10 @@ contract TokenTest is Test {
 
         uint256 amount = 1e20;
         Client.Any2EVMMessage memory message = Client.Any2EVMMessage({
-            messageId: 0x1230000000000000000000000000000000000000000000000000000000000000,
+            messageId: MESSAGE_ID,
             sourceChainSelector: BASE_CHAIN_ID,
             sender: abi.encode(address(0xc0de)),
-            data: abi.encode(RECEIVER, amount),
+            data: abi.encode(SENDER, RECEIVER, amount),
             destTokenAmounts: new Client.EVMTokenAmount[](0)
         });
         vm.expectRevert(VMEXToken.SenderNotVmexToken.selector);

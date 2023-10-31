@@ -80,7 +80,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     //@param amount -- the amount we burning or minting
     //@param payFeesNative -- flag indicating whether ccip fees are paid in native token or in link
     function bridge(uint64 destinationChainSelector, address receiver, uint256 amount, bool payFeesNative)
-        public
+        external
         payable
         returns (bytes32)
     {
@@ -94,7 +94,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         //if we're burning on the destination chain, this chain needs to do the opposite
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(destinationVmexToken),
-            data: abi.encode(receiver, amount),
+            data: abi.encode(msg.sender, receiver, amount),
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: "",
             feeToken: payFeesNative ? address(0) : LINK
@@ -110,7 +110,8 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
             }
 
             messageId = IRouterClient(i_router).ccipSend{value: fee}(destinationChainSelector, message);
-        } else {//if we are not paying for bridge fees, we transfer some link from sender to pay
+        } else {
+            //if we are not paying for bridge fees, we transfer some link from sender to pay
             if (!isOpen) {
                 ERC20(LINK).safeTransferFrom(msg.sender, address(this), fee);
             }
@@ -130,12 +131,12 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
             revert SourceChainNotAllowed(sourceChain);
         }
 
-        address sender = abi.decode(message.sender, (address));
-        if (sourceChainVmexToken != sender) {
+        address messageSender = abi.decode(message.sender, (address));
+        if (sourceChainVmexToken != messageSender) {
             revert SenderNotVmexToken();
         }
 
-        (address receiver, uint256 amount) = abi.decode(message.data, (address, uint256));
+        (address sender, address receiver, uint256 amount) = abi.decode(message.data, (address, address, uint256));
         _mint(receiver, amount);
 
         emit BridgeFrom(sourceChain, sender, receiver, amount, message.messageId);
