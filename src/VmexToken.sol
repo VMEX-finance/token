@@ -24,8 +24,12 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     error SenderNotVmexToken();
     error VmexTokenAlreadyAddedOnChain();
 
-    event BridgeTo(uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount);
-    event BridgeFrom(uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount);
+    event BridgeTo(
+        uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount, bytes32 messageId
+    );
+    event BridgeFrom(
+        uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount, bytes32 messageId
+    );
     event ChainAdded(uint64 indexed chain, address vmexToken);
     event IsOpenChanged(bool isOpen);
 
@@ -37,7 +41,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         LINK = _link;
         ERC20(_link).safeApprove(address(i_router), type(uint256).max);
 
-        if (hubChain == true) {
+        if (hubChain) {
             _mint(newOwner, MAX_TOTAL_SUPPLY);
         }
     }
@@ -55,12 +59,12 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         emit ChainAdded(chain, vmexToken);
     }
 
-    function withdrawGasTokens(uint256 amount) external onlyOwner {
-        ERC20(LINK).safeTransfer(owner, amount);
+    function withdrawToken(address token, uint256 amount) external onlyOwner {
+        ERC20(token).safeTransfer(owner, amount);
     }
 
-    function withdraw(address beneficiary) external onlyOwner {
-        SafeTransferLib.safeTransferETH(beneficiary, address(this).balance);
+    function withdrawNative(uint256 amount) external onlyOwner {
+        SafeTransferLib.safeTransferETH(owner, amount);
     }
 
     function setIsOpen(bool newIsOpen) external onlyOwner {
@@ -72,16 +76,14 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     //@dev used for when users are paying for bridging themselves and already have vmex tokens on the source chain
     //@param destinationChainSelecter -- the chain we are bridging to
     //@param receiver -- the corresponding token address on another chain
-    //@param burnOrMint -- an enum selection specifying to a burn or mint of the token on the receiving chain
     //@param receiver -- the user recieving the tokens on the receiving chain
     //@param amount -- the amount we burning or minting
-    //@param payFeesIn -- an enum specifying the token we are using to pay ccip fees
-    function bridge(
-        uint64 destinationChainSelector,
-        address receiver,
-        uint256 amount,
-        bool payFeesNative
-    ) public payable returns (bytes32 messageId) {
+    //@param payFeesNative -- flag indicating whether ccip fees are paid in native token or in link
+    function bridge(uint64 destinationChainSelector, address receiver, uint256 amount, bool payFeesNative)
+        public
+        payable
+        returns (bytes32)
+    {
         address destinationVmexToken = vmexTokenByChain[destinationChainSelector];
         if (destinationVmexToken == address(0)) {
             revert DestinationChainNotAllowed(destinationChainSelector);
@@ -100,34 +102,42 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
 
         uint256 fee = IRouterClient(i_router).getFee(destinationChainSelector, message);
 
-        if (payFeesNative == false) {
-            //if we are not paying for bridge fees, we transfer some link from sender to pay
-            if (isOpen == false) {
+        bytes32 messageId;
+        if (payFeesNative) {
+            //if we're not paying, user will have to make sure they're sending eth with their tx
+            if (!isOpen && msg.value < fee) {
+                revert NotEnoughEthForFee();
+            }
+
+            messageId = IRouterClient(i_router).ccipSend{value: fee}(destinationChainSelector, message);
+        } else {//if we are not paying for bridge fees, we transfer some link from sender to pay
+            if (!isOpen) {
                 ERC20(LINK).safeTransferFrom(msg.sender, address(this), fee);
             }
 
-            return IRouterClient(i_router).ccipSend(destinationChainSelector, message);
+            messageId = IRouterClient(i_router).ccipSend(destinationChainSelector, message);
         }
 
-        //if we're not paying, user will have to make sure they're sending eth with their tx
-        if (isOpen == false && msg.value < fee) {
-            revert NotEnoughEthForFee();
-        }
+        emit BridgeTo(destinationChainSelector, msg.sender, receiver, amount, messageId);
 
-        return IRouterClient(i_router).ccipSend{value: fee}(destinationChainSelector, message);
+        return messageId;
     }
 
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
-        address sourceChainVmexToken = vmexTokenByChain[message.sourceChainSelector];
+        uint64 sourceChain = message.sourceChainSelector;
+        address sourceChainVmexToken = vmexTokenByChain[sourceChain];
         if (sourceChainVmexToken == address(0)) {
-            revert SourceChainNotAllowed(message.sourceChainSelector);
+            revert SourceChainNotAllowed(sourceChain);
         }
 
-        if (sourceChainVmexToken != abi.decode(message.sender, (address))) {
+        address sender = abi.decode(message.sender, (address));
+        if (sourceChainVmexToken != sender) {
             revert SenderNotVmexToken();
         }
 
         (address receiver, uint256 amount) = abi.decode(message.data, (address, uint256));
         _mint(receiver, amount);
+
+        emit BridgeFrom(sourceChain, sender, receiver, amount, message.messageId);
     }
 }
