@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.22;
 
 import {IRouterClient} from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
@@ -27,11 +27,7 @@ contract CCIPRouterMock is IRouterClient {
         return supportedTokens;
     }
 
-    function getFee(uint64, Client.EVM2AnyMessage memory)
-        external
-        view
-        returns (uint256)
-    {
+    function getFee(uint64, Client.EVM2AnyMessage memory) external view returns (uint256) {
         return fee;
     }
 
@@ -39,12 +35,9 @@ contract CCIPRouterMock is IRouterClient {
         messageId = newMessageId;
     }
 
-    function ccipSend(uint64, Client.EVM2AnyMessage calldata)
-        external
-        payable
-        returns (bytes32) {
-            return messageId;
-        }
+    function ccipSend(uint64, Client.EVM2AnyMessage calldata) external payable returns (bytes32) {
+        return messageId;
+    }
 
     function ccipReceive(address receiver, Client.Any2EVMMessage calldata message) external {
         IAny2EVMMessageReceiver(receiver).ccipReceive(message);

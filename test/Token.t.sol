@@ -27,15 +27,14 @@ contract TokenTest is Test {
     }
 
     function testTokenSupply() public {
-        assertEq(vmexToken.totalSupply(), MAX_TOTAL_SUPPLY); 
+        assertEq(vmexToken.totalSupply(), MAX_TOTAL_SUPPLY);
 
         VMEXToken tokenNotOnHub = new VMEXToken(address(router), address(link), false, address(this));
         assertEq(tokenNotOnHub.totalSupply(), 0);
-        
     }
-    
+
     function testBridgeTo() public {
-        vmexToken.allowlistChain(BASE_CHAIN_ID, address(0xbabe));
+        vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, address(0xbabe));
 
         vmexToken.bridge(BASE_CHAIN_ID, address(this), MAX_TOTAL_SUPPLY, false);
 

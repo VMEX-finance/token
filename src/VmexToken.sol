@@ -1,30 +1,33 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.22;
 
 import {IRouterClient} from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {Client} from "ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import {CCIPReceiver} from "ccip/contracts/src/v0.8/ccip/applications/CCIPReceiver.sol";
 import {Owned} from "solmate/auth/Owned.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
-import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 
-import {Test, console2} from "forge-std/Test.sol";
-
-contract VMEXToken is ERC20, CCIPReceiver, Owned, Test {
+contract VMEXToken is ERC20, CCIPReceiver, Owned {
     using SafeTransferLib for ERC20;
-
-    //set chain to allowed as both source, and destination
-    mapping(uint64 chain => address vmexToken) public allowlistedChains;
 
     uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
     address internal immutable LINK;
+
+    //set chain to allowed as both source, and destination
+    mapping(uint64 chain => address vmexToken) public vmexTokenByChain;
     bool public isOpen = true;
 
     error DestinationChainNotAllowed(uint64 chain);
     error SourceChainNotAllowed(uint64 chain);
     error NotEnoughEthForFee();
     error SenderNotVmexToken();
+    error VmexTokenAlreadyAddedOnChain();
+
+    event BridgeTo(uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount);
+    event BridgeFrom(uint64 indexed chain, address indexed sender, address indexed receiver, uint256 amount);
+    event ChainAdded(uint64 indexed chain, address vmexToken);
+    event IsOpenChanged(bool isOpen);
 
     constructor(address _router, address _link, bool hubChain, address newOwner)
         ERC20("VMEX Token", "VMEX", 18)
@@ -44,8 +47,12 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned, Test {
     receive() external payable {}
 
     ////////////////// Helpers \\\\\\\\\\\\\\\\\\
-    function allowlistChain(uint64 destinationChainSelector, address vmexToken) external onlyOwner {
-        allowlistedChains[destinationChainSelector] = vmexToken;
+    function addVmexTokenOnChain(uint64 chain, address vmexToken) external onlyOwner {
+        if (vmexTokenByChain[chain] != address(0)) revert VmexTokenAlreadyAddedOnChain();
+
+        vmexTokenByChain[chain] = vmexToken;
+
+        emit ChainAdded(chain, vmexToken);
     }
 
     function withdrawGasTokens(uint256 amount) external onlyOwner {
@@ -53,33 +60,29 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned, Test {
     }
 
     function withdraw(address beneficiary) external onlyOwner {
-        uint256 amount = address(this).balance;
-        (bool sent,) = beneficiary.call{value: amount}("");
-        if (!sent) revert("failed to withdraw eth");
+        SafeTransferLib.safeTransferETH(beneficiary, address(this).balance);
     }
 
-    function toggleOpenStatus() external onlyOwner {
-        if (isOpen == true) {
-            isOpen = false;
-        } else {
-            isOpen = true;
-        }
+    function setIsOpen(bool newIsOpen) external onlyOwner {
+        isOpen = newIsOpen;
+
+        emit IsOpenChanged(newIsOpen);
     }
 
     //@dev used for when users are paying for bridging themselves and already have vmex tokens on the source chain
     //@param destinationChainSelecter -- the chain we are bridging to
     //@param receiver -- the corresponding token address on another chain
     //@param burnOrMint -- an enum selection specifying to a burn or mint of the token on the receiving chain
-    //@param receiverUserAddress -- the user recieving the tokens on the receiving chain
+    //@param receiver -- the user recieving the tokens on the receiving chain
     //@param amount -- the amount we burning or minting
     //@param payFeesIn -- an enum specifying the token we are using to pay ccip fees
     function bridge(
         uint64 destinationChainSelector,
-        address receiverUserAddress,
+        address receiver,
         uint256 amount,
         bool payFeesNative
     ) public payable returns (bytes32 messageId) {
-        address destinationVmexToken = allowlistedChains[destinationChainSelector];
+        address destinationVmexToken = vmexTokenByChain[destinationChainSelector];
         if (destinationVmexToken == address(0)) {
             revert DestinationChainNotAllowed(destinationChainSelector);
         }
@@ -89,7 +92,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned, Test {
         //if we're burning on the destination chain, this chain needs to do the opposite
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(destinationVmexToken),
-            data: abi.encode(receiverUserAddress, amount),
+            data: abi.encode(receiver, amount),
             tokenAmounts: new Client.EVMTokenAmount[](0),
             extraArgs: "",
             feeToken: payFeesNative ? address(0) : LINK
@@ -115,7 +118,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned, Test {
     }
 
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
-        address sourceChainVmexToken = allowlistedChains[message.sourceChainSelector];
+        address sourceChainVmexToken = vmexTokenByChain[message.sourceChainSelector];
         if (sourceChainVmexToken == address(0)) {
             revert SourceChainNotAllowed(message.sourceChainSelector);
         }
