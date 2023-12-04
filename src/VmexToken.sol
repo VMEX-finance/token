@@ -12,8 +12,8 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     using SafeTransferLib for ERC20;
 
     uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
-	address internal currentRouter; 
-	bytes internal extraArgs; 
+	address public currentRouter; 
+	bytes public extraArgs; 
     ERC20 internal immutable LINK;
 
     //set chain to allowed as both source, and destination

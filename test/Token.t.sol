@@ -192,4 +192,15 @@ contract TokenTest is Test {
         vm.expectRevert(VMEXToken.VmexTokenAlreadyAddedOnChain.selector);
         vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
     }
+
+	function testChangeRouterAddress() public {
+		vmexToken.setRouter(address(69)); 
+		assertEq(vmexToken.currentRouter(), address(69)); 
+	}
+
+	function testChangeExtraArgs() public {
+		bytes memory args = abi.encode("420"); 
+		vmexToken.setExtraArgs(args); 
+		assertEq(vmexToken.extraArgs(), args); 
+	}
 }
