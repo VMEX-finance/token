@@ -33,7 +33,7 @@ contract TokenTest is Test {
         router.setFee(0.1 ether);
         router.setMessageId(MESSAGE_ID);
 
-        vmexToken = new VMEXToken(address(router), address(link), true, address(this));
+        vmexToken = new VMEXToken(address(router), address(link), true, address(this), "");
 
         vm.label(address(vmexToken), "VMEX");
         vm.label(address(router), "ROUTER");
@@ -45,7 +45,7 @@ contract TokenTest is Test {
     function testTokenSupply() public {
         assertEq(vmexToken.totalSupply(), MAX_TOTAL_SUPPLY);
 
-        VMEXToken tokenNotOnHub = new VMEXToken(address(router), address(link), false, address(this));
+        VMEXToken tokenNotOnHub = new VMEXToken(address(router), address(link), false, address(this), "");
         assertEq(tokenNotOnHub.totalSupply(), 0);
     }
 

@@ -16,9 +16,9 @@ contract TokenScript is Script, Helper {
         VMEXToken vmexToken;
         (address router, address link,,) = Helper.getConfigFromNetwork(source);
         if (source == Helper.SupportedNetworks.AVALANCHE_FUJI) {
-            vmexToken = new VMEXToken(router, link, true, 0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c);
+            vmexToken = new VMEXToken(router, link, true, 0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c, "");
         } else {
-            vmexToken = new VMEXToken(router, link, false, 0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c);
+            vmexToken = new VMEXToken(router, link, false, 0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c, "");
         }
 
         // vmexToken.allowlistChain(sourceId, true);
@@ -29,11 +29,22 @@ contract TokenScript is Script, Helper {
     }
 }
 
+contract WhitelistToken is Script, Helper {
+	function whitelist(SupportedNetworks sourceOrDest, address payable token) external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+
+        (,,, uint64 tokenChainId) = Helper.getConfigFromNetwork(sourceOrDest);
+        console2.log(tokenChainId);
+
+		VMEXToken vmexToken = VMEXToken(token); 
+
+		vmexToken.addVmexTokenOnChain(tokenChainId, token); 
+	}
+}
+
 contract BridgeToken is Script, Helper {
-    function run(
-        address payable _vmexToken, //source
-        SupportedNetworks destination
-    ) external {
+    function run(address payable _vmexToken, SupportedNetworks destination) external {
         VMEXToken vmexToken = VMEXToken(_vmexToken);
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");

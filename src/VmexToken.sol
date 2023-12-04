@@ -12,6 +12,8 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     using SafeTransferLib for ERC20;
 
     uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
+	address internal currentRouter; 
+	bytes internal extraArgs; 
     ERC20 internal immutable LINK;
 
     //set chain to allowed as both source, and destination
@@ -26,13 +28,16 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     event ChainAdded(uint64 indexed chain, address vmexToken);
     event IsOpenChanged(bool isOpen);
 
-    constructor(address _router, address link, bool hubChain, address newOwner)
+    constructor(address _router, address link, bool hubChain, address newOwner, bytes memory _extraArgs)
         ERC20("VMEX Token", "VMEX", 18)
         CCIPReceiver(_router)
         Owned(newOwner)
     {
+		currentRouter = _router; 
+		extraArgs = _extraArgs; 	
+
         LINK = ERC20(link);
-        LINK.safeApprove(address(i_router), type(uint256).max);
+        LINK.safeApprove(address(_router), type(uint256).max);
 
         if (hubChain) {
             _mint(newOwner, MAX_TOTAL_SUPPLY);
@@ -40,7 +45,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     }
 
     //to receive eth to pay for ccip
-    //i_router accepts ETH and WETH as payment
+    //router accepts ETH and WETH as payment
     receive() external payable {}
 
     ////////////////// Helpers \\\\\\\\\\\\\\\\\\
@@ -83,11 +88,11 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
             receiver: abi.encode(destinationVmexToken),
             data: abi.encode(receiver, amount),
             tokenAmounts: new Client.EVMTokenAmount[](0),
-            extraArgs: "",
+            extraArgs: extraArgs,
             feeToken: payFeesNative ? address(0) : address(LINK)
         });
 
-        uint256 fee = IRouterClient(i_router).getFee(destinationChainSelector, message);
+        uint256 fee = IRouterClient(currentRouter).getFee(destinationChainSelector, message);
 
         if (payFeesNative) {
             //if we're not paying, user will have to make sure they're sending eth with their tx
@@ -95,11 +100,11 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
                 revert NotEnoughEthForFee();
             }
 
-            return IRouterClient(i_router).ccipSend{value: fee}(destinationChainSelector, message);
+            return IRouterClient(currentRouter).ccipSend{value: fee}(destinationChainSelector, message);
         }
 
         LINK.safeTransferFrom(msg.sender, address(this), fee);
-        return IRouterClient(i_router).ccipSend(destinationChainSelector, message);
+        return IRouterClient(currentRouter).ccipSend(destinationChainSelector, message);
     }
 
     function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
@@ -117,4 +122,13 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         (address receiver, uint256 amount) = abi.decode(message.data, (address, uint256));
         _mint(receiver, amount);
     }
+
+	///////////////// Helpers ///////////////// 
+	function setRouter(address newRouter) external onlyOwner {
+		currentRouter = newRouter; 						
+	}
+
+	function setExtraArgs(bytes memory newExtraArgs) external onlyOwner {
+		extraArgs = newExtraArgs; 
+	}	
 }
