@@ -12,8 +12,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     using SafeTransferLib for ERC20;
 
     uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
-	address public currentRouter; 
-	bytes public extraArgs; 
+    address public currentRouter;
     ERC20 internal immutable LINK;
 
     //set chain to allowed as both source, and destination
@@ -27,14 +26,14 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
 
     event ChainAdded(uint64 indexed chain, address vmexToken);
     event IsOpenChanged(bool isOpen);
+    event NewRouter(address indexed router);
 
-    constructor(address _router, address link, bool hubChain, address newOwner, bytes memory _extraArgs)
+    constructor(address _router, address link, bool hubChain, address newOwner)
         ERC20("VMEX Token", "VMEX", 18)
         CCIPReceiver(_router)
         Owned(newOwner)
     {
-		currentRouter = _router; 
-		extraArgs = _extraArgs; 	
+        currentRouter = _router;
 
         LINK = ERC20(link);
         LINK.safeApprove(address(_router), type(uint256).max);
@@ -43,10 +42,6 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
             _mint(newOwner, MAX_TOTAL_SUPPLY);
         }
     }
-
-    //to receive eth to pay for ccip
-    //router accepts ETH and WETH as payment
-    receive() external payable {}
 
     ////////////////// Helpers \\\\\\\\\\\\\\\\\\
     function addVmexTokenOnChain(uint64 chain, address vmexToken) external onlyOwner {
@@ -71,11 +66,13 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     //@param receiver -- the user recieving the tokens on the receiving chain
     //@param amount -- the amount we burning or minting
     //@param payFeesNative -- flag indicating whether ccip fees are paid in native token or in link
-    function bridge(uint64 destinationChainSelector, address receiver, uint256 amount, bool payFeesNative)
-        external
-        payable
-        returns (bytes32)
-    {
+    function bridge(
+        uint64 destinationChainSelector,
+        address receiver,
+        uint256 amount,
+        bool payFeesNative,
+        bytes memory extraArgs
+    ) external payable returns (bytes32) {
         address destinationVmexToken = vmexTokenByChain[destinationChainSelector];
         if (destinationVmexToken == address(0)) {
             revert DestinationChainNotAllowed(destinationChainSelector);
@@ -100,10 +97,17 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
                 revert NotEnoughEthForFee();
             }
 
+			if (msg.value > fee) {
+        	    uint256 refund = msg.value - fee;
+        	    payable(msg.sender).transfer(refund);
+        	}
+
             return IRouterClient(currentRouter).ccipSend{value: fee}(destinationChainSelector, message);
         }
 
         LINK.safeTransferFrom(msg.sender, address(this), fee);
+
+
         return IRouterClient(currentRouter).ccipSend(destinationChainSelector, message);
     }
 
@@ -123,12 +127,9 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         _mint(receiver, amount);
     }
 
-	///////////////// Helpers ///////////////// 
-	function setRouter(address newRouter) external onlyOwner {
-		currentRouter = newRouter; 						
-	}
-
-	function setExtraArgs(bytes memory newExtraArgs) external onlyOwner {
-		extraArgs = newExtraArgs; 
-	}	
+    ///////////////// Helpers /////////////////
+    function setRouter(address newRouter) external onlyOwner {
+        currentRouter = newRouter;
+        emit NewRouter(newRouter);
+    }
 }

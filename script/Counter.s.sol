@@ -16,9 +16,9 @@ contract TokenScript is Script, Helper {
         VMEXToken vmexToken;
         (address router, address link,,) = Helper.getConfigFromNetwork(source);
         if (source == Helper.SupportedNetworks.AVALANCHE_FUJI) {
-            vmexToken = new VMEXToken(router, link, true, 0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c, "");
+            vmexToken = new VMEXToken(router, link, true, 0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c);
         } else {
-            vmexToken = new VMEXToken(router, link, false, 0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c, "");
+            vmexToken = new VMEXToken(router, link, false, 0x4CF908f6f1EAF51d143823Ce3A5Dd0Eb8373f23c);
         }
 
         // vmexToken.allowlistChain(sourceId, true);
@@ -30,17 +30,17 @@ contract TokenScript is Script, Helper {
 }
 
 contract WhitelistToken is Script, Helper {
-	function whitelist(SupportedNetworks sourceOrDest, address payable token) external {
+    function whitelist(SupportedNetworks sourceOrDest, address payable token) external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
         (,,, uint64 tokenChainId) = Helper.getConfigFromNetwork(sourceOrDest);
         console2.log(tokenChainId);
 
-		VMEXToken vmexToken = VMEXToken(token); 
+        VMEXToken vmexToken = VMEXToken(token);
 
-		vmexToken.addVmexTokenOnChain(tokenChainId, token); 
-	}
+        vmexToken.addVmexTokenOnChain(tokenChainId, token);
+    }
 }
 
 contract BridgeToken is Script, Helper {
@@ -59,7 +59,7 @@ contract BridgeToken is Script, Helper {
 
         // vmexToken.allowlistChain(destinationChainId, true);
 
-        bytes32 messageId = vmexToken.bridge(destinationChainId, user, amount, useNative);
+        bytes32 messageId = vmexToken.bridge(destinationChainId, user, amount, useNative, "");
 
         console2.log(
             "You can now monitor the status of your Chainlink CCIP Message via https://ccip.chain.link using CCIP Message ID: "

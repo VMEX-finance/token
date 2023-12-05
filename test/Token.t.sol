@@ -33,7 +33,7 @@ contract TokenTest is Test {
         router.setFee(0.1 ether);
         router.setMessageId(MESSAGE_ID);
 
-        vmexToken = new VMEXToken(address(router), address(link), true, address(this), "");
+        vmexToken = new VMEXToken(address(router), address(link), true, address(this));
 
         vm.label(address(vmexToken), "VMEX");
         vm.label(address(router), "ROUTER");
@@ -45,7 +45,7 @@ contract TokenTest is Test {
     function testTokenSupply() public {
         assertEq(vmexToken.totalSupply(), MAX_TOTAL_SUPPLY);
 
-        VMEXToken tokenNotOnHub = new VMEXToken(address(router), address(link), false, address(this), "");
+        VMEXToken tokenNotOnHub = new VMEXToken(address(router), address(link), false, address(this));
         assertEq(tokenNotOnHub.totalSupply(), 0);
     }
 
@@ -63,7 +63,7 @@ contract TokenTest is Test {
         vm.expectEmit(true, true, false, true, address(link));
         emit Transfer(address(vmexToken), address(router), fee);
 
-        vmexToken.bridge(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, false);
+        vmexToken.bridge(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, false, "");
 
         assertEq(vmexToken.balanceOf(address(this)), 0);
         assertEq(link.balanceOf(address(vmexToken)), 0);
@@ -82,16 +82,32 @@ contract TokenTest is Test {
         vm.expectEmit(true, true, false, true, address(vmexToken));
         emit Transfer(address(this), address(0), MAX_TOTAL_SUPPLY);
 
-        vmexToken.bridge{value: fee}(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, true);
+        vmexToken.bridge{value: fee}(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, true, "");
 
         assertEq(vmexToken.balanceOf(address(this)), 0);
         assertEq(address(router).balance, nativeBalanceBefore + fee);
         assertEq(address(vmexToken).balance, 0);
     }
 
+    function testNativeBridgeRefund() public {
+        uint256 nativeBalanceBefore = address(router).balance;
+
+        vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
+        uint256 fee = router.fee();
+
+        vm.deal(address(this), fee + 1e18);
+
+        vm.expectEmit(true, true, false, true, address(vmexToken));
+        emit Transfer(address(this), address(0), MAX_TOTAL_SUPPLY);
+
+        vmexToken.bridge{value: fee + 1e18}(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, true, "");
+
+		assertEq(address(this).balance, 1e18); 
+    }
+
     function testBridgeToUnallowedChain() public {
         vm.expectRevert(abi.encodeWithSelector(VMEXToken.DestinationChainNotAllowed.selector, BASE_CHAIN_ID));
-        vmexToken.bridge(BASE_CHAIN_ID, address(this), MAX_TOTAL_SUPPLY, false);
+        vmexToken.bridge(BASE_CHAIN_ID, address(this), MAX_TOTAL_SUPPLY, false, "");
     }
 
     function testNativeBridgeToNotEnoughFee() public {
@@ -101,7 +117,7 @@ contract TokenTest is Test {
         vm.deal(address(this), fee);
 
         vm.expectRevert(VMEXToken.NotEnoughEthForFee.selector);
-        vmexToken.bridge{value: fee - 1}(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, true);
+        vmexToken.bridge{value: fee - 1}(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, true, "");
     }
 
     function testBridgeFrom() public {
@@ -193,14 +209,8 @@ contract TokenTest is Test {
         vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
     }
 
-	function testChangeRouterAddress() public {
-		vmexToken.setRouter(address(69)); 
-		assertEq(vmexToken.currentRouter(), address(69)); 
-	}
-
-	function testChangeExtraArgs() public {
-		bytes memory args = abi.encode("420"); 
-		vmexToken.setExtraArgs(args); 
-		assertEq(vmexToken.extraArgs(), args); 
-	}
+    function testChangeRouterAddress() public {
+        vmexToken.setRouter(address(69));
+        assertEq(vmexToken.currentRouter(), address(69));
+    }
 }
