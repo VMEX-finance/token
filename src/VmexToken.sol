@@ -2,8 +2,10 @@
 pragma solidity ^0.8.22;
 
 import {IRouterClient} from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import {IAny2EVMMessageReceiver} from "ccip/contracts/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
 import {Client} from "ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
 import {CCIPReceiver} from "ccip/contracts/src/v0.8/ccip/applications/CCIPReceiver.sol";
+import {IERC165} from "forge-std/interfaces/IERC165.sol"; 
 import {Owned} from "solmate/auth/Owned.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
@@ -27,6 +29,11 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     event ChainAdded(uint64 indexed chain, address vmexToken);
     event IsOpenChanged(bool isOpen);
     event NewRouter(address indexed router);
+	
+	modifier onlyRouter() override {
+  	  if (msg.sender != address(currentRouter)) revert InvalidRouter(msg.sender);
+  	  _;
+  	}
 
     constructor(address _router, address link, bool hubChain, address newOwner)
         ERC20("VMEX Token", "VMEX", 18)
@@ -129,5 +136,14 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     function setRouter(address newRouter) external onlyOwner {
         currentRouter = newRouter;
         emit NewRouter(newRouter);
+    }
+
+    ///////////////// Override /////////////////
+    function supportsInterface(bytes4 interfaceId) public pure virtual override returns (bool) {
+        return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || interfaceId == type(IERC165).interfaceId;
+    }
+
+    function ccipReceive(Client.Any2EVMMessage calldata message) external virtual override onlyRouter {
+        _ccipReceive(message);
     }
 }
