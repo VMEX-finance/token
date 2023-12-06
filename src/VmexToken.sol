@@ -80,7 +80,6 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
 
         _burn(msg.sender, amount);
 
-        //if we're burning on the destination chain, this chain needs to do the opposite
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(destinationVmexToken),
             data: abi.encode(receiver, amount),
@@ -92,21 +91,20 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         uint256 fee = IRouterClient(currentRouter).getFee(destinationChainSelector, message);
 
         if (payFeesNative) {
-            //if we're not paying, user will have to make sure they're sending eth with their tx
             if (msg.value < fee) {
                 revert NotEnoughEthForFee();
             }
 
-			if (msg.value > fee) {
-        	    uint256 refund = msg.value - fee;
-        	    payable(msg.sender).transfer(refund);
-        	}
+            if (msg.value > fee) {
+                unchecked {
+                    SafeTransferLib.safeTransferETH(msg.sender, msg.value - fee);
+                }
+            }
 
             return IRouterClient(currentRouter).ccipSend{value: fee}(destinationChainSelector, message);
         }
 
         LINK.safeTransferFrom(msg.sender, address(this), fee);
-
 
         return IRouterClient(currentRouter).ccipSend(destinationChainSelector, message);
     }

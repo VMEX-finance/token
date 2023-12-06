@@ -90,8 +90,6 @@ contract TokenTest is Test {
     }
 
     function testNativeBridgeRefund() public {
-        uint256 nativeBalanceBefore = address(router).balance;
-
         vmexToken.addVmexTokenOnChain(BASE_CHAIN_ID, VMEX_ON_BASE);
         uint256 fee = router.fee();
 
@@ -102,7 +100,7 @@ contract TokenTest is Test {
 
         vmexToken.bridge{value: fee + 1e18}(BASE_CHAIN_ID, RECEIVER, MAX_TOTAL_SUPPLY, true, "");
 
-		assertEq(address(this).balance, 1e18); 
+        assertEq(address(this).balance, 1e18);
     }
 
     function testBridgeToUnallowedChain() public {
