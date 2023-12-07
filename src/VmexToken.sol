@@ -4,13 +4,12 @@ pragma solidity ^0.8.22;
 import {IRouterClient} from "ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 import {IAny2EVMMessageReceiver} from "ccip/contracts/src/v0.8/ccip/interfaces/IAny2EVMMessageReceiver.sol";
 import {Client} from "ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
-import {CCIPReceiver} from "ccip/contracts/src/v0.8/ccip/applications/CCIPReceiver.sol";
-import {IERC165} from "forge-std/interfaces/IERC165.sol"; 
+import {IERC165} from "forge-std/interfaces/IERC165.sol";
 import {Owned} from "solmate/auth/Owned.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 
-contract VMEXToken is ERC20, CCIPReceiver, Owned {
+contract VMEXToken is ERC20, Owned {
     using SafeTransferLib for ERC20;
 
     uint256 public constant MAX_TOTAL_SUPPLY = 100_000_000 * 1e18; //100 million max
@@ -25,19 +24,19 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
     error NotEnoughEthForFee();
     error SenderNotVmexToken();
     error VmexTokenAlreadyAddedOnChain();
+    error InvalidRouter();
 
     event ChainAdded(uint64 indexed chain, address vmexToken);
     event IsOpenChanged(bool isOpen);
     event NewRouter(address indexed router);
-	
-	modifier onlyRouter() override {
-  	  if (msg.sender != address(currentRouter)) revert InvalidRouter(msg.sender);
-  	  _;
-  	}
+
+    modifier onlyRouter() {
+        if (msg.sender != address(currentRouter)) revert InvalidRouter();
+        _;
+    }
 
     constructor(address _router, address link, bool hubChain, address newOwner)
         ERC20("VMEX Token", "VMEX", 18)
-        CCIPReceiver(_router)
         Owned(newOwner)
     {
         currentRouter = _router;
@@ -116,7 +115,7 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         return IRouterClient(currentRouter).ccipSend(destinationChainSelector, message);
     }
 
-    function _ccipReceive(Client.Any2EVMMessage memory message) internal override {
+    function _ccipReceive(Client.Any2EVMMessage memory message) internal {
         uint64 sourceChain = message.sourceChainSelector;
         address sourceChainVmexToken = vmexTokenByChain[sourceChain];
         if (sourceChainVmexToken == address(0)) {
@@ -138,12 +137,12 @@ contract VMEXToken is ERC20, CCIPReceiver, Owned {
         emit NewRouter(newRouter);
     }
 
-    ///////////////// Override /////////////////
-    function supportsInterface(bytes4 interfaceId) public pure virtual override returns (bool) {
+    ///////////////// CCIP interface /////////////////
+    function supportsInterface(bytes4 interfaceId) public pure returns (bool) {
         return interfaceId == type(IAny2EVMMessageReceiver).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 
-    function ccipReceive(Client.Any2EVMMessage calldata message) external virtual override onlyRouter {
+    function ccipReceive(Client.Any2EVMMessage calldata message) external onlyRouter {
         _ccipReceive(message);
     }
 }
